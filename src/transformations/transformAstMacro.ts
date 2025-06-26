@@ -90,6 +90,10 @@ function buildAstMacro(
 			return `Missing '${name}' property in ${ts.SyntaxKind[kindLiteral]}`;
 		}
 
+		function autoProp(name: string): string {
+			return `Property '${name}' in ${ts.SyntaxKind[kindLiteral]} is automatically generated, do not provide it yourself`;
+		}
+
 		switch (kindLiteral) {
 			case ts.SyntaxKind.Identifier: {
 				const textType = getPropertyType(type, "text");
@@ -227,15 +231,42 @@ function buildAstMacro(
 				return f.propertyAccessExpression(left, name as ts.MemberName);
 			}
 
-			case ts.SyntaxKind.CallExpression: {
+			case ts.SyntaxKind.SpreadElement: {
 				const expressionType = getPropertyType(type, "expression");
-				const argumentListType = getPropertyType(type, "argumentList");
+				const parentType = getPropertyType(type, "parent");
 				if (!expressionType) {
 					return Diagnostics.error(node, missingProp("expression"));
 				}
+				if (parentType) {
+					return Diagnostics.error(node, autoProp("parent"));
+				}
+
 				const expr = buildFromType(expressionType);
-				const args = buildArgumentList(argumentListType);
+				return f.spread(expr);
+			}
+
+			case ts.SyntaxKind.CallExpression: {
+				const expressionType = getPropertyType(type, "expression");
+				const argumentsType = getPropertyType(type, "arguments");
+				if (!expressionType) {
+					return Diagnostics.error(node, missingProp("expression"));
+				}
+
+				const expr = buildFromType(expressionType);
+				const args = buildArgumentList(argumentsType);
 				return f.call(expr as ts.Expression, args);
+			}
+
+			case ts.SyntaxKind.NewExpression: {
+				const expressionType = getPropertyType(type, "expression");
+				const argumentsType = getPropertyType(type, "arguments");
+				if (!expressionType) {
+					return Diagnostics.error(node, missingProp("expression"));
+				}
+
+				const expr = buildFromType(expressionType);
+				const args = buildArgumentList(argumentsType);
+				return f.newExpression(expr as ts.Expression, args);
 			}
 
 			default:

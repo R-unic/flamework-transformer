@@ -112,6 +112,18 @@ export namespace f {
 		);
 	}
 
+	export function newExpression(
+		expression: ts.Expression | string,
+		args?: ConvertableExpression[],
+		typeArguments?: ts.TypeNode[],
+	) {
+		return factory.createNewExpression(
+			toExpression(expression, identifier),
+			typeArguments,
+			args?.map((x) => toExpression(x)),
+		);
+	}
+
 	export function object(
 		properties:
 			| readonly ts.ObjectLiteralElementLike[]
@@ -198,6 +210,10 @@ export namespace f {
 
 	export function superExpression() {
 		return ts.factory.createSuper();
+	}
+
+	export function spread(expression: ConvertableExpression) {
+		return ts.factory.createSpreadElement(toExpression(expression));
 	}
 
 	/// Statements
