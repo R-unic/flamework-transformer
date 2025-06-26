@@ -1,4 +1,4 @@
-import {} from "ts-expose-internals";
+import { } from "ts-expose-internals";
 import ts from "typescript";
 import path from "path";
 import { transformFile } from "./transformations/transformFile";
@@ -9,6 +9,7 @@ import { f } from "./util/factory";
 import chalk from "chalk";
 import { PKG_VERSION } from "./classes/pathTranslator/constants";
 import { emitTypescriptMismatch } from "./util/functions/emitTypescriptMismatch";
+import { isDiagnosticWithLocation } from "./util/diagnosticsUtils";
 
 export default function (program: ts.Program, config?: TransformerConfig) {
 	return (context: ts.TransformationContext): ((file: ts.SourceFile) => ts.Node) => {
@@ -41,7 +42,7 @@ export default function (program: ts.Program, config?: TransformerConfig) {
 					const preEmitDiagnostics = ts.getPreEmitDiagnostics(program, originalFile);
 					if (preEmitDiagnostics.some((x) => x.category === ts.DiagnosticCategory.Error)) {
 						preEmitDiagnostics
-							.filter(ts.isDiagnosticWithLocation)
+							.filter(isDiagnosticWithLocation)
 							.forEach((diag) => context.addDiagnostic(diag));
 						return file;
 					}

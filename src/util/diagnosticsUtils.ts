@@ -66,3 +66,7 @@ export function withDiagnosticContext<T>(node: ts.Node, message: (() => string) 
 
 	return result.value;
 }
+
+export function isDiagnosticWithLocation(diagnostic: ts.Diagnostic): diagnostic is ts.DiagnosticWithLocation {
+	return diagnostic.file !== undefined && diagnostic.start !== undefined;
+}

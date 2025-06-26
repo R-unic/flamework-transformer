@@ -105,6 +105,7 @@ export class TransformState {
 	public isGame: boolean;
 
 	public isUserMacroCache = new Map<ts.Symbol, boolean>();
+	public isAstMacroCache = new Map<ts.Symbol, boolean>();
 	public flameworkGuardLibraryPath?: string;
 
 	private setupBuildInfo() {
@@ -399,6 +400,24 @@ export class TransformState {
 		}
 
 		this.isUserMacroCache.set(symbol, false);
+		return false;
+	}
+
+	isAstMacro(symbol: ts.Symbol) {
+		const cached = this.isAstMacroCache.get(symbol);
+		if (cached !== undefined) return cached;
+
+		if (symbol.declarations) {
+			for (const declaration of symbol.declarations) {
+				const metadata = new NodeMetadata(this, declaration);
+				if (metadata.isRequested("ast-macro")) {
+					this.isAstMacroCache.set(symbol, true);
+					return true;
+				}
+			}
+		}
+
+		this.isAstMacroCache.set(symbol, false);
 		return false;
 	}
 
