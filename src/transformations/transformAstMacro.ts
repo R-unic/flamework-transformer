@@ -123,17 +123,45 @@ function buildAstMacro(node: ts.CallExpression, args: ts.Expression[], type: ts.
 				return f.array(elements, elements.length > 3);
 			}
 
+			case ts.SyntaxKind.ParenthesizedExpression: {
+				const expressionType = getPropertyType(type, "expression");
+				if (!expressionType) {
+					return Diagnostics.error(node, missingProp("expression"));
+				}
+
+				return f.parenthesized(buildFromType(expressionType));
+			}
+
+			case ts.SyntaxKind.PrefixUnaryExpression: {
+				const operandType = getPropertyType(type, "operand");
+				const operator = getPropertyType(type, "operator");
+				if (!operandType) {
+					return Diagnostics.error(node, missingProp("operand"));
+				}
+				if (!operator) {
+					return Diagnostics.error(node, missingProp("operator"));
+				}
+
+				const operand = buildFromType(operandType);
+				const operatorKind = (operator as ts.LiteralType).value;
+				if (typeof operatorKind !== "number") {
+					return Diagnostics.error(node, "operator.kind must be a SyntaxKind");
+				}
+
+				return f.prefixUnary(operand, operatorKind);
+			}
+
 			case ts.SyntaxKind.BinaryExpression: {
 				const leftType = getPropertyType(type, "left");
 				const rightType = getPropertyType(type, "right");
-				const operatorType = getPropertyType(type, "operatorToken");
-				if (!leftType || !rightType || !operatorType) {
+				const operator = getPropertyType(type, "operatorToken");
+				if (!leftType || !rightType || !operator) {
 					return Diagnostics.error(node, "BinaryExpression must have left, right, and operatorToken");
 				}
 
 				const left = buildFromType(leftType);
 				const right = buildFromType(rightType);
-				const operatorKind = (operatorType as ts.LiteralType).value;
+				const operatorKind = (operator as ts.LiteralType).value;
 				if (typeof operatorKind !== "number") {
 					return Diagnostics.error(node, "operatorToken.kind must be a SyntaxKind");
 				}

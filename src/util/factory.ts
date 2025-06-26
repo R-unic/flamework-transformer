@@ -142,12 +142,20 @@ export namespace f {
 		return f.as(expression, keywordType(ts.SyntaxKind.NeverKeyword));
 	}
 
+	export function parenthesized(expression: ConvertableExpression) {
+		return factory.createParenthesizedExpression(toExpression(expression));
+	}
+
 	export function binary(
 		left: ConvertableExpression,
 		op: ts.BinaryOperator | ts.BinaryOperatorToken,
 		right: ConvertableExpression,
 	) {
 		return factory.createBinaryExpression(toExpression(left), op, toExpression(right));
+	}
+
+	export function prefixUnary(operand: ConvertableExpression, operator: ts.PrefixUnaryOperator) {
+		return factory.createPrefixUnaryExpression(operator, toExpression(operand));
 	}
 
 	export function elementAccessExpression(
