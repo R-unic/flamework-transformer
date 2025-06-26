@@ -41,7 +41,8 @@ function buildAstMacro(node: ts.CallExpression, args: ts.Expression[], type: ts.
 			return args[type.value];
 		}
 
-		if (!isObjectType(type)) {
+		const constraint = type.getConstraint();
+		if (!isObjectType(type) && !(type.isTypeParameter() && constraint && isObjectType(constraint))) {
 			return Diagnostics.error(
 				node,
 				"Expected type to be a class, interface, or argument mapping, got: " + type.checker.typeToString(type),
