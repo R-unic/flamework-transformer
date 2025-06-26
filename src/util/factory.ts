@@ -132,9 +132,9 @@ export namespace f {
 	export function as(expression: ts.Expression, node: ts.TypeNode, explicit = false) {
 		return explicit
 			? factory.createAsExpression(
-					factory.createAsExpression(expression, keywordType(ts.SyntaxKind.UnknownKeyword)),
-					node,
-			  )
+				factory.createAsExpression(expression, keywordType(ts.SyntaxKind.UnknownKeyword)),
+				node,
+			)
 			: factory.createAsExpression(expression, node);
 	}
 
@@ -295,18 +295,18 @@ export namespace f {
 				defaultImport,
 				imports
 					? factory.createNamedImports(
-							imports.map((x) => {
-								if (Array.isArray(x)) {
-									return factory.createImportSpecifier(
-										false,
-										typeof x[0] === "string" ? f.identifier(x[0]) : x[0],
-										x[1],
-									);
-								} else {
-									return factory.createImportSpecifier(false, undefined, x);
-								}
-							}),
-					  )
+						imports.map((x) => {
+							if (Array.isArray(x)) {
+								return factory.createImportSpecifier(
+									false,
+									typeof x[0] === "string" ? f.identifier(x[0]) : x[0],
+									x[1],
+								);
+							} else {
+								return factory.createImportSpecifier(false, undefined, x);
+							}
+						}),
+					)
 					: undefined,
 			),
 			toExpression(path),
@@ -714,8 +714,8 @@ export namespace f {
 				tokenType === "!"
 					? token(ts.SyntaxKind.ExclamationToken)
 					: tokenType === "?"
-					? token(ts.SyntaxKind.QuestionToken)
-					: undefined;
+						? token(ts.SyntaxKind.QuestionToken)
+						: undefined;
 			return factory.updatePropertyDeclaration(
 				node,
 				modifiers?.length === 0 ? undefined : modifiers,
