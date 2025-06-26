@@ -18,6 +18,9 @@ import { buildTupleGuardsIntrinsic } from "./macros/intrinsics/guards";
 import { isTupleType } from "../util/functions/isTupleType";
 import { inlineMacroIntrinsic } from "./macros/intrinsics/inlining";
 import { buildSymbolIdIntrinsic } from "./macros/intrinsics/symbol";
+import { getParameterCount } from "../util/functions/getParameterCount";
+import { isObjectType } from "../util/functions/isObjectType";
+import { isUndefinedArgument } from "../util/functions/isUndefinedArgument";
 
 export function transformUserMacro(
 	state: TransformState,
@@ -91,10 +94,6 @@ export function transformUserMacro(
 	}
 }
 
-function isUndefinedArgument(argument: ts.Node | undefined) {
-	return argument ? f.is.identifier(argument) && argument.text === "undefined" : true;
-}
-
 function getLabels(state: TransformState, type: ts.Type): UserMacro {
 	if (!isTupleType(state, type)) {
 		return {
@@ -161,10 +160,10 @@ function buildUserMacro(state: TransformState, node: ts.Expression, macro: UserM
 			typeof value === "string"
 				? f.string(value)
 				: typeof value === "number"
-				? f.number(value)
-				: typeof value === "boolean"
-				? f.bool(value)
-				: f.nil(),
+					? f.number(value)
+					: typeof value === "boolean"
+						? f.bool(value)
+						: f.nil(),
 		);
 	} else if (macro.kind === "intrinsic") {
 		return f.asNever(buildIntrinsicMacro(state, node, macro));
@@ -476,41 +475,26 @@ function getUserMacroOfUnion(state: TransformState, node: ts.Expression, target:
 	}
 }
 
-function isObjectType(type: ts.Type): boolean {
-	return type.isIntersection() ? type.types.every(isObjectType) : (type.flags & ts.TypeFlags.Object) !== 0;
-}
-
-function getParameterCount(state: TransformState, signature: ts.Signature) {
-	const length = signature.parameters.length;
-	if (ts.signatureHasRestParameter(signature)) {
-		const restType = state.typeChecker.getTypeOfSymbol(signature.parameters[length - 1]);
-		if (isTupleType(state, restType)) {
-			return length + restType.target.fixedLength - (restType.target.hasRestElement ? 0 : 1);
-		}
-	}
-	return length;
-}
-
 export type UserMacro =
 	| {
-			kind: "generic";
-			target: ts.Type;
-			metadata: string;
-	  }
+		kind: "generic";
+		target: ts.Type;
+		metadata: string;
+	}
 	| {
-			kind: "caller";
-			metadata: string;
-	  }
+		kind: "caller";
+		metadata: string;
+	}
 	| {
-			kind: "many";
-			members: Map<string, UserMacro> | Array<UserMacro>;
-	  }
+		kind: "many";
+		members: Map<string, UserMacro> | Array<UserMacro>;
+	}
 	| {
-			kind: "literal";
-			value: string | number | boolean | undefined;
-	  }
+		kind: "literal";
+		value: string | number | boolean | undefined;
+	}
 	| {
-			kind: "intrinsic";
-			id: string;
-			inputs: ts.Type[];
-	  };
+		kind: "intrinsic";
+		id: string;
+		inputs: ts.Type[];
+	};

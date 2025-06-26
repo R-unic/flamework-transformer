@@ -4,6 +4,9 @@ import { TransformState } from "../classes/transformState";
 import { f } from "../util/factory";
 import { NodeMetadata } from "../classes/nodeMetadata";
 import { inspect } from "util";
+import { isObjectType } from "../util/functions/isObjectType";
+import { getParameterCount } from "../util/functions/getParameterCount";
+import { isUndefinedArgument } from "../util/functions/isUndefinedArgument";
 
 export function transformAstMacro(
 	state: TransformState,
@@ -20,20 +23,44 @@ export function transformAstMacro(
 
 	const target = nodeMetadata.getSymbol("ast-macro-target")?.[0];
 	if (target && (target.flags & ts.SymbolFlags.Type) !== 0 && target.declarations && target.declarations.length > 0) {
-		return buildAstMacro(node, args, signature.getReturnType().checker.getTypeAtLocation(target.declarations[0]));
+		return buildAstMacro(state, node, args, state.typeChecker.getTypeAtLocation(target.declarations[0]));
 	}
 
-	Diagnostics.error(node, `Could not find linked ast-macro-target`);
+	const parameters = new Map<number, ts.Type>();
+	let highestParameterIndex = -1;
+	for (let i = 0; i < getParameterCount(state, signature); i++) {
+		const targetParameterType = state.typeChecker.getParameterType(signature, i).getNonNullableType();
+		const manyMetadata = state.typeChecker.getTypeOfPropertyOfType(targetParameterType, "_flamework_macro_many");
+		if (manyMetadata) {
+			if (!isUndefinedArgument(args[i + (signature.thisParameter ? 1 : 0)])) {
+				return Diagnostics.error(node, "Cannot explicitly pass AST macro target");
+			}
+
+			parameters.set(i, manyMetadata);
+			highestParameterIndex = Math.max(highestParameterIndex, i);
+		}
+	}
+
+	for (let i = 0; i <= highestParameterIndex; i++) {
+		const astType = parameters.get(i);
+		if (!astType) continue;
+
+		return buildAstMacro(state, node, args, astType);
+	}
+
+	Diagnostics.error(node, "Could not find linked ast-macro-target metadata");
 }
 
-function buildAstMacro(node: ts.CallExpression, args: ts.Expression[], type: ts.Type): ts.Expression {
-	const { checker } = type;
+function buildAstMacro(
+	state: TransformState,
+	node: ts.CallExpression,
+	args: ts.Expression[],
+	type: ts.Type,
+): ts.Expression {
+	const checker = state.typeChecker;
 
 	function getPropertyType(objType: ts.Type, name: string): ts.Type | undefined {
-		const prop = objType.getProperty(name);
-		if (!prop) return undefined;
-
-		return checker.getTypeOfSymbolAtLocation(prop, prop.valueDeclaration! ?? prop.declarations?.[0]);
+		return checker.getTypeOfPropertyOfType(objType, name);
 	}
 
 	function buildFromType(type: ts.Type): ts.Expression {
@@ -110,13 +137,13 @@ function buildAstMacro(node: ts.CallExpression, args: ts.Expression[], type: ts.
 				}
 
 				const useArgs = isTrueType(elementsType);
-				if (!isObjectType(elementsType) && !useArgs) {
+				if (!isObjectType(elementsType, false) && !useArgs) {
 					return Diagnostics.error(node, "Expected array literal type (or argument mappings) for 'elements'");
 				}
 
 				const elements = useArgs
 					? args
-					: elementsType.checker
+					: checker
 						.getTypeArguments(elementsType)
 						.map(buildFromType)
 						.filter((v) => v !== undefined);
@@ -222,7 +249,9 @@ function buildAstMacro(node: ts.CallExpression, args: ts.Expression[], type: ts.
 		// TODO: validation
 		if (isObjectType(type)) {
 			const elements = checker.getTypeArguments(type as ts.TypeReference);
-			return elements.map((t) => args[t.isLiteral() ? (t.value as number) : 0]).filter((v) => v !== undefined);
+			return elements
+				.map((t) => (t.isLiteral() ? args[t.value as number] : buildFromType(t)))
+				.filter((v) => v !== undefined);
 		} else if (isTrueType(type)) {
 			return args;
 		}
@@ -232,14 +261,11 @@ function buildAstMacro(node: ts.CallExpression, args: ts.Expression[], type: ts.
 
 	return buildFromType(type) as ts.Expression;
 }
+
 function isTrueType(elementsType: ts.Type): elementsType is ts.LiteralType {
 	return (
 		"intrinsicName" in elementsType &&
 		typeof elementsType.intrinsicName === "string" &&
 		elementsType.intrinsicName === "true"
 	);
-}
-
-function isObjectType(type: ts.Type): type is ts.TypeReference {
-	return (type.flags & ts.TypeFlags.Object) !== 0;
 }
