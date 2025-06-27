@@ -5,13 +5,13 @@
 	"main": "out/index.js",
 	"author": "runicly",
 	"license": "MIT",
-	"homepage": "https://github.com/FireTS/rbxts-transformer-flamework",
+	"homepage": "https://github.com/R-unic/flamework-transformer",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/FireTS/rbxts-transformer-flamework.git"
+		"url": "git+https://github.com/R-unic/flamework-transformer.git"
 	},
 	"bugs": {
-		"url": "https://github.com/FireTS/rbxts-transformer-flamework/issues"
+		"url": "https://github.com/R-unic/flamework-transformer/issues"
 	},
 	"scripts": {
 		"build": "tsc",
