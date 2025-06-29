@@ -1,7 +1,7 @@
 {
 	"name": "@runicly/rbxts-transformer-flamework",
 	"version": "1.3.3",
-	"description": "An opinionated game framework for Roblox.",
+	"description": "An opinionated game framework for Roblox (with AST macros).",
 	"main": "out/index.js",
 	"author": "runicly",
 	"license": "MIT",
