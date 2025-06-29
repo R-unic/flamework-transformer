@@ -542,6 +542,12 @@ export class TransformState {
 		if (stack) stack.push(...statements);
 	}
 
+	pushToVar(name: string, expression: ts.Expression | undefined) {
+		const id = f.identifier(name, true);
+		this.prereq(f.variableStatement(id, expression));
+		return id;
+	}
+
 	isCapturing(threshold = 1) {
 		return this.prereqStack.length > threshold;
 	}

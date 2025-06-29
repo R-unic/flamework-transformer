@@ -7,6 +7,7 @@ import { inspect } from "util";
 import { isObjectType } from "../util/functions/isObjectType";
 import { getParameterCount } from "../util/functions/getParameterCount";
 import { isUndefinedArgument } from "../util/functions/isUndefinedArgument";
+import { getSymbolType } from "../util/functions/getSymbolType";
 
 export function transformAstMacro(
 	state: TransformState,
@@ -63,11 +64,33 @@ function buildAstMacro(
 		return checker.getTypeOfPropertyOfType(objType, name);
 	}
 
+	const registeredPrereqs = new Map<string, ts.Identifier>();
 	function buildFromType(type: ts.Type): ts.Expression {
+		// prereq vars
+		const prereqs = getPropertyType(type, "$vars");
+		if (prereqs !== undefined && isObjectType(prereqs)) {
+			const prereqEntries = prereqs
+				.getProperties()
+				.map<[string, ts.Type | undefined]>((symbol) => [symbol.name, getSymbolType(symbol, checker)])
+				.filter((entry): entry is [string, ts.Type] => entry[1] !== undefined);
+
+			for (const [name, type] of prereqEntries) {
+				const identifier = state.pushToVar(name, buildFromType(type));
+				registeredPrereqs.set(name, identifier);
+			}
+		}
+
+		// argument mapping (by position)
 		if (type.isNumberLiteral()) {
 			return args[type.value];
 		}
 
+		// prereq var mapping
+		if (type.isStringLiteral() && registeredPrereqs.has(type.value)) {
+			return registeredPrereqs.get(type.value)!;
+		}
+
+		// now expected to be an AST node interface
 		const constraint = type.getConstraint();
 		if (!isObjectType(type) && !(type.isTypeParameter() && constraint && isObjectType(constraint))) {
 			return Diagnostics.error(
@@ -280,9 +303,7 @@ function buildAstMacro(
 		// TODO: validation
 		if (isObjectType(type)) {
 			const elements = checker.getTypeArguments(type as ts.TypeReference);
-			return elements
-				.map((t) => (t.isLiteral() ? args[t.value as number] : buildFromType(t)))
-				.filter((v) => v !== undefined);
+			return elements.map(buildFromType).filter((v) => v !== undefined);
 		} else if (isTrueType(type)) {
 			return args;
 		}

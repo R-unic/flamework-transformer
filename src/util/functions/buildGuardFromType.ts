@@ -152,9 +152,9 @@ export function createGuardGenerator(state: TransformState, file: ts.SourceFile,
 			return additionalGuards.length === 0
 				? baseGuard
 				: listLikeGuard("intersection", [
-						baseGuard,
-						f.call(f.field(tId, "children"), [f.object(additionalGuards)]),
-				  ]);
+					baseGuard,
+					f.call(f.field(tId, "children"), [f.object(additionalGuards)]),
+				]);
 		}
 
 		if (type.isIntersection()) {
