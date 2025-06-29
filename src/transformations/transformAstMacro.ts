@@ -337,7 +337,8 @@ function buildAstMacro(
 				});
 
 			for (const [name, type] of prereqEntries) {
-				const identifier = state.pushToVar(name, buildFromType(type));
+				const expression = buildFromType(type);
+				const identifier = ts.isIdentifier(expression) ? expression : state.pushToVar(name, expression);
 				registeredPrereqs.set(name, identifier);
 			}
 		}
