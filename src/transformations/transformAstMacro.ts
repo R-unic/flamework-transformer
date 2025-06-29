@@ -8,6 +8,7 @@ import { isObjectType } from "../util/functions/isObjectType";
 import { getParameterCount } from "../util/functions/getParameterCount";
 import { isUndefinedArgument } from "../util/functions/isUndefinedArgument";
 import { getSymbolType } from "../util/functions/getSymbolType";
+import { isNeverType } from "../util/functions/isNeverType";
 
 export function transformAstMacro(
 	state: TransformState,
@@ -66,20 +67,6 @@ function buildAstMacro(
 
 	const registeredPrereqs = new Map<string, ts.Identifier>();
 	function buildFromType(type: ts.Type): ts.Expression {
-		// prereq vars
-		const prereqs = getPropertyType(type, "$vars");
-		if (prereqs !== undefined && isObjectType(prereqs)) {
-			const prereqEntries = prereqs
-				.getProperties()
-				.map<[string, ts.Type | undefined]>((symbol) => [symbol.name, getSymbolType(symbol, checker)])
-				.filter((entry): entry is [string, ts.Type] => entry[1] !== undefined);
-
-			for (const [name, type] of prereqEntries) {
-				const identifier = state.pushToVar(name, buildFromType(type));
-				registeredPrereqs.set(name, identifier);
-			}
-		}
-
 		// argument mapping (by position)
 		if (type.isNumberLiteral()) {
 			return args[type.value];
@@ -98,6 +85,8 @@ function buildAstMacro(
 				"Expected type to be a class, interface, or argument mapping, got: " + type.checker.typeToString(type),
 			);
 		}
+
+		registerAnyPrereqs(type);
 
 		const kindType = getPropertyType(type, "kind");
 		if (kindType === undefined) {
@@ -297,10 +286,27 @@ function buildAstMacro(
 		}
 	}
 
+	function registerAnyPrereqs(type: ts.TypeReference | ts.IntersectionType | ts.TypeParameter) {
+		const prereqs = getPropertyType(type, "$vars");
+		if (prereqs !== undefined && isObjectType(prereqs)) {
+			const prereqEntries = prereqs
+				.getProperties()
+				.map<[string, ts.Type | undefined]>((symbol) => [symbol.name, getSymbolType(symbol, checker)])
+				.filter((entry): entry is [string, ts.Type] => {
+					const entryType = entry[1];
+					return entryType !== undefined && !isNeverType(entryType);
+				});
+
+			for (const [name, type] of prereqEntries) {
+				const identifier = state.pushToVar(name, buildFromType(type));
+				registeredPrereqs.set(name, identifier);
+			}
+		}
+	}
+
 	function buildArgumentList(type: ts.Type | undefined): ts.Expression[] {
 		if (!type) return [];
 
-		// TODO: validation
 		if (isObjectType(type)) {
 			const elements = checker.getTypeArguments(type as ts.TypeReference);
 			return elements.map(buildFromType).filter((v) => v !== undefined);
@@ -308,6 +314,7 @@ function buildAstMacro(
 			return args;
 		}
 
+		// TODO: error
 		return [];
 	}
 
