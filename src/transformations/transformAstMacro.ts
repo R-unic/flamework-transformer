@@ -9,6 +9,8 @@ import { getParameterCount } from "../util/functions/getParameterCount";
 import { isUndefinedArgument } from "../util/functions/isUndefinedArgument";
 import { getSymbolType } from "../util/functions/getSymbolType";
 import { isNeverType } from "../util/functions/isNeverType";
+import { isTrueType } from "../util/functions/isTrueType";
+import { isSyntaxKind } from "../util/functions/isSyntaxKind";
 
 export function transformAstMacro(
 	state: TransformState,
@@ -32,15 +34,19 @@ export function transformAstMacro(
 	let highestParameterIndex = -1;
 	for (let i = 0; i < getParameterCount(state, signature); i++) {
 		const targetParameterType = state.typeChecker.getParameterType(signature, i).getNonNullableType();
-		const manyMetadata = state.typeChecker.getTypeOfPropertyOfType(targetParameterType, "_flamework_macro_many");
-		if (manyMetadata) {
-			if (!isUndefinedArgument(args[i + (signature.thisParameter ? 1 : 0)])) {
-				return Diagnostics.error(node, "Cannot explicitly pass AST macro target");
-			}
+		const astType = state.typeChecker.getTypeOfPropertyOfType(targetParameterType, "_flamework_macro_many");
+		if (!astType) continue;
 
-			parameters.set(i, manyMetadata);
-			highestParameterIndex = Math.max(highestParameterIndex, i);
+		const macroTargetParameterIndex = i + (signature.thisParameter ? 1 : 0);
+		if (!isUndefinedArgument(args[macroTargetParameterIndex])) {
+			return Diagnostics.error(
+				node,
+				`Cannot explicitly pass AST macro target (expected ${macroTargetParameterIndex - 1} arguments, got ${args.length})`,
+			);
 		}
+
+		parameters.set(i, astType);
+		highestParameterIndex = Math.max(highestParameterIndex, i);
 	}
 
 	for (let i = 0; i <= highestParameterIndex; i++) {
@@ -50,7 +56,10 @@ export function transformAstMacro(
 		return buildAstMacro(state, node, args, astType);
 	}
 
-	Diagnostics.error(node, "Could not find linked ast-macro-target metadata");
+	Diagnostics.error(
+		node,
+		"Could not find linked ast-macro-target metadata or parameter with type Modding.Many<MacroTarget>",
+	);
 }
 
 function buildAstMacro(
@@ -78,32 +87,33 @@ function buildAstMacro(
 		}
 
 		// now expected to be an AST node interface
+		const typeString = checker.typeToString(type);
 		const constraint = type.getConstraint();
-		if (!isObjectType(type) && !(type.isTypeParameter() && constraint && isObjectType(constraint))) {
+		const isObjectTypeParameter = type.isTypeParameter() && constraint && isObjectType(constraint);
+		if (!isObjectType(type) && !isObjectTypeParameter) {
 			return Diagnostics.error(
 				node,
-				"Expected type to be a class, interface, or argument mapping, got: " + type.checker.typeToString(type),
+				"Expected type to be a class, interface, or argument mapping, got: " + typeString,
 			);
 		}
 
 		registerAnyPrereqs(type);
-
 		const kindType = getPropertyType(type, "kind");
 		if (kindType === undefined) {
-			return Diagnostics.error(node, "Missing 'kind' property in type: " + inspect(type));
+			return Diagnostics.error(node, "Missing 'kind' property in type: " + typeString);
 		}
 
 		const kindLiteral = (kindType as ts.LiteralType).value as ts.SyntaxKind;
-		if (typeof kindLiteral !== "number") {
-			return Diagnostics.error(node, "'kind' must be a numeric literal");
+		if (!isSyntaxKind(kindLiteral)) {
+			return Diagnostics.error(node, "'kind' must be a SyntaxKind, got: " + checker.typeToString(kindType));
 		}
 
 		function missingProp(name: string): string {
-			return `Missing '${name}' property in ${ts.SyntaxKind[kindLiteral]}`;
+			return `Missing '${name}' property in type: ${typeString}`;
 		}
 
 		function autoProp(name: string): string {
-			return `Property '${name}' in ${ts.SyntaxKind[kindLiteral]} is automatically generated, do not provide it yourself`;
+			return `Do not provide automatically generated property '${name}' in: ${typeString}`;
 		}
 
 		switch (kindLiteral) {
@@ -114,7 +124,10 @@ function buildAstMacro(
 					return Diagnostics.error(node, missingProp("text"));
 				}
 				if (typeof text !== "string") {
-					return Diagnostics.error(node, "Expected string literal for Identifier.text");
+					return Diagnostics.error(
+						node,
+						"Expected string literal for Identifier.text, got: " + checker.typeToString(textType!),
+					);
 				}
 
 				return f.identifier(text);
@@ -127,7 +140,10 @@ function buildAstMacro(
 					return Diagnostics.error(node, missingProp("value"));
 				}
 				if (typeof value !== "number") {
-					return Diagnostics.error(node, "Expected number literal for NumericLiteral.value");
+					return Diagnostics.error(
+						node,
+						"Expected number literal for NumericLiteral.value, got: " + checker.typeToString(valueType!),
+					);
 				}
 
 				return f.number(value);
@@ -140,7 +156,10 @@ function buildAstMacro(
 					return Diagnostics.error(node, missingProp("value"));
 				}
 				if (typeof value !== "string") {
-					return Diagnostics.error(node, "Expected string literal for StringLiteral.value");
+					return Diagnostics.error(
+						node,
+						"Expected string literal for StringLiteral.value, got: " + checker.typeToString(valueType!),
+					);
 				}
 
 				return f.string(value);
@@ -154,7 +173,10 @@ function buildAstMacro(
 
 				const useArgs = isTrueType(elementsType);
 				if (!isObjectType(elementsType, false) && !useArgs) {
-					return Diagnostics.error(node, "Expected array literal type (or argument mappings) for 'elements'");
+					return Diagnostics.error(
+						node,
+						"Expected array literal type (or argument mappings) for 'elements', got: " + checker.typeToString(elementsType!),
+					);
 				}
 
 				const elements = useArgs
@@ -188,8 +210,11 @@ function buildAstMacro(
 
 				const operand = buildFromType(operandType);
 				const operatorKind = (operator as ts.LiteralType).value;
-				if (typeof operatorKind !== "number") {
-					return Diagnostics.error(node, "operator.kind must be a SyntaxKind");
+				if (!isSyntaxKind<ts.PrefixUnaryOperator>(operatorKind)) {
+					return Diagnostics.error(
+						node,
+						"operator must be a SyntaxKind, got: " + checker.typeToString(operandType),
+					);
 				}
 
 				return f.prefixUnary(operand, operatorKind);
@@ -198,16 +223,25 @@ function buildAstMacro(
 			case ts.SyntaxKind.BinaryExpression: {
 				const leftType = getPropertyType(type, "left");
 				const rightType = getPropertyType(type, "right");
-				const operator = getPropertyType(type, "operatorToken");
-				if (!leftType || !rightType || !operator) {
-					return Diagnostics.error(node, "BinaryExpression must have left, right, and operatorToken");
+				const operatorType = getPropertyType(type, "operatorToken");
+				if (!leftType) {
+					return Diagnostics.error(node, missingProp("left"));
+				}
+				if (!rightType) {
+					return Diagnostics.error(node, missingProp("right"));
+				}
+				if (!operatorType) {
+					return Diagnostics.error(node, missingProp("operatorToken"));
 				}
 
 				const left = buildFromType(leftType);
 				const right = buildFromType(rightType);
-				const operatorKind = (operator as ts.LiteralType).value;
-				if (typeof operatorKind !== "number") {
-					return Diagnostics.error(node, "operatorToken.kind must be a SyntaxKind");
+				const operatorKind = (operatorType as ts.LiteralType).value;
+				if (!isSyntaxKind<ts.BinaryOperator>(operatorKind)) {
+					return Diagnostics.error(
+						node,
+						"operatorToken must be a SyntaxKind, got: " + checker.typeToString(operatorType),
+					);
 				}
 
 				return f.binary(left, operatorKind, right);
@@ -281,8 +315,13 @@ function buildAstMacro(
 				return f.newExpression(expr as ts.Expression, args);
 			}
 
-			default:
-				Diagnostics.error(node, `Unsupported SyntaxKind: ${ts.SyntaxKind[kindLiteral]} (${kindLiteral})`);
+			default: {
+				const message = ts.isStatement(node)
+					? "Statements are not supported and are not currently planned"
+					: `Unsupported SyntaxKind: ${ts.SyntaxKind[kindLiteral]} (${kindLiteral})`;
+
+				Diagnostics.error(node, message);
+			}
 		}
 	}
 
@@ -314,17 +353,8 @@ function buildAstMacro(
 			return args;
 		}
 
-		// TODO: error
-		return [];
+		Diagnostics.error(node, `Invalid argument list type: ${checker.typeToString(type)}`);
 	}
 
 	return buildFromType(type) as ts.Expression;
-}
-
-function isTrueType(elementsType: ts.Type): elementsType is ts.LiteralType {
-	return (
-		"intrinsicName" in elementsType &&
-		typeof elementsType.intrinsicName === "string" &&
-		elementsType.intrinsicName === "true"
-	);
 }
